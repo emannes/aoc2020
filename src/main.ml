@@ -1084,6 +1084,35 @@ module Problem14 : S = struct
     or_mask, and_mask
   ;;
 
+  let expand_wildcards mask =
+    let num_xs = String.count mask ~f:(Char.( = ) 'X') in
+    let mask = String.tr ~target:'0' ~replacement:'Z' mask in
+    let rec fill mask bits xs_left =
+      if xs_left = 0
+      then mask
+      else
+        fill
+          (String.substr_replace_first
+             mask
+             ~pattern:"X"
+             ~with_:(bits mod 2 |> Int.to_string))
+          (bits lsr 1)
+          (xs_left - 1)
+    in
+    List.init (Int.pow 2 num_xs) ~f:(fun bits ->
+        fill mask bits num_xs |> String.tr ~target:'Z' ~replacement:'X')
+  ;;
+
+  let%expect_test "expand_wildcards" =
+    List.iter ~f:(printf "%s\n") (expand_wildcards "000000000000000000000000000000X1001X");
+    [%expect
+      {|
+      XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX01XX10
+      XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX11XX10
+      XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX01XX11
+      XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX11XX11 |}]
+  ;;
+
   let to_address_n_data_exn instruction =
     let open Re in
     let re =
@@ -1100,20 +1129,38 @@ module Problem14 : S = struct
     [%expect {| (48514 171994) |}]
   ;;
 
+  (* a pretty ugly solution, but i'm tired *)
   let solve subpart file_contents =
-    let end_state =
-      List.fold ~init:State.init file_contents ~f:(fun state instruction ->
+    match (subpart : Subpart.t) with
+    | A ->
+      let end_state =
+        List.fold ~init:State.init file_contents ~f:(fun state instruction ->
+            match String.chop_prefix instruction ~prefix:"mask = " with
+            | Some mask ->
+              let or_mask, and_mask = to_or_n_and_masks mask in
+              { state with or_mask; and_mask }
+            | None ->
+              let address, data = to_address_n_data_exn instruction in
+              State.insert state ~address ~data)
+      in
+      print_int (List.sum (module Int) (Map.data end_state.memory) ~f:Fn.id)
+    | B ->
+      List.fold
+        file_contents
+        ~init:(Int.Map.empty, [])
+        ~f:(fun (memory, masks) instruction ->
           match String.chop_prefix instruction ~prefix:"mask = " with
-          | Some mask ->
-            let or_mask, and_mask = to_or_n_and_masks mask in
-            { state with or_mask; and_mask }
+          | Some mask -> memory, expand_wildcards mask
           | None ->
             let address, data = to_address_n_data_exn instruction in
-            State.insert state ~address ~data)
-    in
-    match (subpart : Subpart.t) with
-    | A -> print_int (List.sum (module Int) (Map.data end_state.memory) ~f:Fn.id)
-    | B -> failwith "not implemented"
+            ( List.fold ~init:memory masks ~f:(fun memory mask ->
+                  let or_mask, and_mask = to_or_n_and_masks mask in
+                  Map.set memory ~key:(address lor or_mask land and_mask) ~data)
+            , masks ))
+      |> fst
+      |> Map.data
+      |> List.sum (module Int) ~f:Fn.id
+      |> print_int
   ;;
 
   let%expect_test _ =
