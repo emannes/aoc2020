@@ -1438,9 +1438,27 @@ module Problem18 : S = struct
 end
 
 module Problem19 : S = struct
+  module Re2 = struct
+    include Re2
+
+    let seq regexes = List.map regexes ~f:Re2.to_string |> String.concat |> Re2.of_string
+
+    let alt regexes =
+      "("
+      ^ String.concat
+          ~sep:"|"
+          (List.map regexes ~f:Re2.to_string
+          |> List.dedup_and_sort ~compare:String.compare)
+      ^ ")"
+      |> Re2.of_string
+    ;;
+
+    let repn regex n = List.init n ~f:(fun _ -> regex) |> seq
+  end
+
   module Rule = struct
     type t =
-      | Str of string
+      | Regex of Re2.t
       | Subrules of int list
       | Alt of t list
     [@@deriving sexp, compare]
@@ -1452,7 +1470,8 @@ module Problem19 : S = struct
         match List.tl_exn s with
         | [ rest ] ->
           if String.is_prefix ~prefix:"\"" rest
-          then Str (List.nth_exn (String.to_list rest) 1 |> Char.to_string)
+          then
+            Regex (List.nth_exn (String.to_list rest) 1 |> Char.to_string |> Re2.of_string)
           else Subrules [ Int.of_string rest ]
         | rest ->
           Alt
@@ -1465,45 +1484,72 @@ module Problem19 : S = struct
       rule_num, rule
     ;;
 
-    let simplify rules =
-      let rec simplify' = function
-        | Str s -> Str s
+    let to_regex = function
+      | Regex r -> Some r
+      | Alt _ | Subrules _ -> None
+    ;;
+
+    let simplify_once rules =
+      let rec simplify = function
+        | Regex r -> Regex r
         | Alt alts ->
-          let alts = List.map alts ~f:simplify' |> List.dedup_and_sort ~compare in
-          (match alts with
+          (match List.map alts ~f:simplify with
           | [] -> failwith "uh oh"
           | [ t ] -> t
-          | ts -> Alt ts)
+          | ts ->
+            let ts' = List.map ts ~f:to_regex |> Option.all in
+            (match ts' with
+            | Some regexes -> Regex (Re2.alt regexes)
+            | None -> Alt ts))
         | Subrules subrules ->
           let subrules' =
             List.map subrules ~f:(Map.find_exn rules)
-            |> List.map ~f:(function
-                   | Str s -> Some s
-                   | Alt _ | Subrules _ -> None)
+            |> List.map ~f:to_regex
             |> Option.all
           in
           (match subrules' with
-          | Some strings -> Str (String.concat strings)
+          | Some regexes -> Regex (Re2.seq regexes)
           | None -> Subrules subrules)
       in
-      Map.map rules ~f:simplify'
+      let simplify_pair ~key ~data =
+        match data with
+        | Alt [ Regex r; Subrules [ other_rule; this_rule ] ] when key = this_rule ->
+          (match to_regex (Map.find_exn rules other_rule) with
+          | Some other_regex ->
+            Regex
+              (sprintf "(%s)*%s" (Re2.to_string other_regex) (Re2.to_string r)
+              |> Re2.of_string)
+          | None -> data)
+        | Alt [ Regex r; Subrules [ other_rule1; this_rule; other_rule2 ] ]
+          when key = this_rule ->
+          (match
+             ( to_regex (Map.find_exn rules other_rule1)
+             , to_regex (Map.find_exn rules other_rule2) )
+           with
+          | Some other_regex1, Some other_regex2 ->
+            (* Hack: rather than matching
+              (other_regex1 x n)r(other_regex2 x n)
+
+              for all n, we pick some maximum n instead.
+             *)
+            let max_repns = 10 in
+            let open Re2 in
+            Regex
+              (List.init max_repns ~f:(fun i ->
+                   seq [ repn other_regex1 i; r; repn other_regex2 i ])
+              |> alt)
+          | _ -> data)
+        | data -> simplify data
+      in
+      Map.mapi rules ~f:simplify_pair
+    ;;
+
+    let rec simplify rules =
+      let simplified = simplify_once rules in
+      (* Re2 doesn't derive [equal] so we have to use [compare] *)
+      if [%compare: t Int.Map.t] rules simplified = 0 then rules else simplify simplified
     ;;
   end
-
-  let rec matches ~rules s (rule : [ `Rule of Rule.t | `Int of int ]) =
-    let rule =
-      match rule with
-      | `Rule rule -> rule
-      | `Int i -> Map.find_exn rules i
-    in
-    match rule with
-    | Str prefix -> String.chop_prefix s ~prefix |> Option.to_list
-    | Alt alts -> List.concat_map alts ~f:(fun rule -> matches ~rules s (`Rule rule))
-    | Subrules subrules ->
-      List.fold subrules ~init:[ s ] ~f:(fun remaining_strings_to_match rule ->
-          List.concat_map remaining_strings_to_match ~f:(fun remaining ->
-              matches ~rules remaining (`Int rule)))
-  ;;
 
   let solve subpart file_contents =
     let rules, messages =
@@ -1511,22 +1557,16 @@ module Problem19 : S = struct
       |> List.split_while ~f:(fun line -> String.contains line ':')
     in
     let rules = List.map rules ~f:Rule.of_string |> Int.Map.of_alist_exn in
-    (*     print_s [%message (rules : Rule.t Int.Map.t) (messages : string list)] ; *)
-    match (subpart : Subpart.t) with
-    | A ->
-      List.filter messages ~f:(fun message ->
-          (* i.e., matches the whole message and there's nothing left over *)
-          List.exists (matches ~rules message (`Int 0)) ~f:String.is_empty)
-      |> List.length
-      |> print_int
-    (*  |> List.iter ~f:(fun message -> printf "%s\n" message) *)
-    | B ->
-      (*    let rules =
+    let rules =
+      match (subpart : Subpart.t) with
+      | A -> rules
+      | B ->
         Map.set rules ~key:8 ~data:(Alt [ Subrules [ 42 ]; Subrules [ 42; 8 ] ])
         |> Map.set ~key:11 ~data:(Alt [ Subrules [ 42; 31 ]; Subrules [ 42; 11; 31 ] ])
-      in *)
-      let rules = Fn.apply_n_times ~n:100 Rule.simplify rules in
-      print_s [%message (rules : Rule.t Int.Map.t)]
+    in
+    let re = Map.find_exn (Rule.simplify rules) 0 |> Rule.to_regex |> Option.value_exn in
+    let re = sprintf "^%s$" (Re2.to_string re) |> Re2.of_string in
+    List.filter messages ~f:(Re2.matches re) |> List.length |> print_int
   ;;
 
   let%expect_test _ =

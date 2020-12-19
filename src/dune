@@ -1,5 +1,5 @@
 (library
- (libraries core async re)
+ (libraries core async re re2)
  (inline_tests)
  (preprocess
   (pps ppx_inline_test ppx_jane))
