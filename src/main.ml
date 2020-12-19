@@ -1437,6 +1437,82 @@ module Problem18 : S = struct
   ;;
 end
 
+module Problem19 : S = struct
+  module Rule = struct
+    type t =
+      | Char of Char.t
+      | Subrules of int list list
+    [@@deriving sexp]
+
+    let of_string s =
+      let s = String.split s ~on:' ' in
+      let rule_num = Int.of_string (String.chop_suffix_exn ~suffix:":" (List.hd_exn s)) in
+      let rule =
+        match List.tl_exn s with
+        | [ rest ] ->
+          if String.is_prefix ~prefix:"\"" rest
+          then Char (List.nth_exn (String.to_list rest) 1)
+          else Subrules [ [ Int.of_string rest ] ]
+        | rest ->
+          Subrules
+            (List.group rest ~break:(fun _word1 word2 -> String.equal word2 "|")
+            |> List.map ~f:(fun subrule ->
+                   List.filter subrule ~f:(fun word -> String.( <> ) word "|")
+                   |> List.map ~f:Int.of_string))
+      in
+      rule_num, rule
+    ;;
+  end
+
+  let rec matches ~rules s rule =
+    match (Map.find_exn rules rule : Rule.t) with
+    | Char c -> String.chop_prefix s ~prefix:(Char.to_string c) |> Option.to_list
+    | Subrules subrules ->
+      List.concat_map subrules ~f:(fun subrule ->
+          List.fold subrule ~init:[ s ] ~f:(fun remaining_strings_to_match rule ->
+              List.concat_map remaining_strings_to_match ~f:(fun s ->
+                  matches ~rules s rule)))
+  ;;
+
+  let solve subpart file_contents =
+    let rules, messages =
+      List.filter file_contents ~f:(fun line -> not (String.is_empty line))
+      |> List.split_while ~f:(fun line -> String.contains line ':')
+    in
+    let rules = List.map rules ~f:Rule.of_string |> Int.Map.of_alist_exn in
+    (*     print_s [%message (rules : Rule.t Int.Map.t) (messages : string list)] ; *)
+    match (subpart : Subpart.t) with
+    | A ->
+      List.filter messages ~f:(fun message ->
+          (* i.e., matches the whole message and there's nothing left over *)
+          List.exists (matches ~rules message 0) ~f:String.is_empty)
+      |> List.length
+      |> print_int
+    (*  |> List.iter ~f:(fun message -> printf "%s\n" message) *)
+    | B -> failwith "not implemented"
+  ;;
+
+  let%expect_test _ =
+    let file_contents =
+      {|0: 4 1 5
+  1: 2 3 | 3 2
+  2: 4 4 | 5 5
+  3: 4 5 | 5 4
+  4: "a"
+  5: "b"
+  
+  ababbb
+  bababa
+  abbbab
+  aaabbb
+  aaaabbb|}
+      |> parse_as_input
+    in
+    solve A file_contents;
+    [%expect {| 2 |}]
+  ;;
+end
+
 module Not_implemented : S = struct
   let solve subpart _file_contents =
     match (subpart : Subpart.t) with
@@ -1474,6 +1550,7 @@ let command =
            ; (module Problem16 : S)
            ; (module Problem17 : S)
            ; (module Problem18 : S)
+           ; (module Problem19 : S)
            ]
            (problem - 1)
        in
