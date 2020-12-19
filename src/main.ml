@@ -1440,9 +1440,10 @@ end
 module Problem19 : S = struct
   module Rule = struct
     type t =
-      | Char of Char.t
-      | Subrules of int list list
-    [@@deriving sexp]
+      | Str of string
+      | Subrules of int list
+      | Alt of t list
+    [@@deriving sexp, compare]
 
     let of_string s =
       let s = String.split s ~on:' ' in
@@ -1451,27 +1452,57 @@ module Problem19 : S = struct
         match List.tl_exn s with
         | [ rest ] ->
           if String.is_prefix ~prefix:"\"" rest
-          then Char (List.nth_exn (String.to_list rest) 1)
-          else Subrules [ [ Int.of_string rest ] ]
+          then Str (List.nth_exn (String.to_list rest) 1 |> Char.to_string)
+          else Subrules [ Int.of_string rest ]
         | rest ->
-          Subrules
+          Alt
             (List.group rest ~break:(fun _word1 word2 -> String.equal word2 "|")
-            |> List.map ~f:(fun subrule ->
-                   List.filter subrule ~f:(fun word -> String.( <> ) word "|")
-                   |> List.map ~f:Int.of_string))
+            |> List.map ~f:(fun subrules ->
+                   Subrules
+                     (List.filter subrules ~f:(fun word -> String.( <> ) word "|")
+                     |> List.map ~f:Int.of_string)))
       in
       rule_num, rule
     ;;
+
+    let simplify rules =
+      let rec simplify' = function
+        | Str s -> Str s
+        | Alt alts ->
+          let alts = List.map alts ~f:simplify' |> List.dedup_and_sort ~compare in
+          (match alts with
+          | [] -> failwith "uh oh"
+          | [ t ] -> t
+          | ts -> Alt ts)
+        | Subrules subrules ->
+          let subrules' =
+            List.map subrules ~f:(Map.find_exn rules)
+            |> List.map ~f:(function
+                   | Str s -> Some s
+                   | Alt _ | Subrules _ -> None)
+            |> Option.all
+          in
+          (match subrules' with
+          | Some strings -> Str (String.concat strings)
+          | None -> Subrules subrules)
+      in
+      Map.map rules ~f:simplify'
+    ;;
   end
 
-  let rec matches ~rules s rule =
-    match (Map.find_exn rules rule : Rule.t) with
-    | Char c -> String.chop_prefix s ~prefix:(Char.to_string c) |> Option.to_list
+  let rec matches ~rules s (rule : [ `Rule of Rule.t | `Int of int ]) =
+    let rule =
+      match rule with
+      | `Rule rule -> rule
+      | `Int i -> Map.find_exn rules i
+    in
+    match rule with
+    | Str prefix -> String.chop_prefix s ~prefix |> Option.to_list
+    | Alt alts -> List.concat_map alts ~f:(fun rule -> matches ~rules s (`Rule rule))
     | Subrules subrules ->
-      List.concat_map subrules ~f:(fun subrule ->
-          List.fold subrule ~init:[ s ] ~f:(fun remaining_strings_to_match rule ->
-              List.concat_map remaining_strings_to_match ~f:(fun s ->
-                  matches ~rules s rule)))
+      List.fold subrules ~init:[ s ] ~f:(fun remaining_strings_to_match rule ->
+          List.concat_map remaining_strings_to_match ~f:(fun remaining ->
+              matches ~rules remaining (`Int rule)))
   ;;
 
   let solve subpart file_contents =
@@ -1485,11 +1516,17 @@ module Problem19 : S = struct
     | A ->
       List.filter messages ~f:(fun message ->
           (* i.e., matches the whole message and there's nothing left over *)
-          List.exists (matches ~rules message 0) ~f:String.is_empty)
+          List.exists (matches ~rules message (`Int 0)) ~f:String.is_empty)
       |> List.length
       |> print_int
     (*  |> List.iter ~f:(fun message -> printf "%s\n" message) *)
-    | B -> failwith "not implemented"
+    | B ->
+      (*    let rules =
+        Map.set rules ~key:8 ~data:(Alt [ Subrules [ 42 ]; Subrules [ 42; 8 ] ])
+        |> Map.set ~key:11 ~data:(Alt [ Subrules [ 42; 31 ]; Subrules [ 42; 11; 31 ] ])
+      in *)
+      let rules = Fn.apply_n_times ~n:100 Rule.simplify rules in
+      print_s [%message (rules : Rule.t Int.Map.t)]
   ;;
 
   let%expect_test _ =
