@@ -1,20 +1,7 @@
 open! Core
 open! Async
-
-let print_int n = printf "%d\n" n
-let parse_as_input s = String.split_lines s |> List.map ~f:String.strip
-let positive_mod n k = ((n mod k) + k) mod k
-
-module Subpart = struct
-  type t =
-    | A
-    | B
-  [@@deriving sexp]
-end
-
-module type S = sig
-  val solve : Subpart.t -> string List.t -> unit
-end
+open Common
+include Solution
 
 module Problem1 : S = struct
   let pairsumsto set target =
@@ -1591,17 +1578,6 @@ module Problem19 : S = struct
 end
 
 module Problem20 : S = struct
-  module Pair = struct
-    module T = struct
-      type t = int * int [@@deriving sexp, compare]
-    end
-
-    include T
-    include Comparable.Make (T)
-
-    let ( + ) (x1, y1) (x2, y2) = x1 + x2, y1 + y2
-  end
-
   module Tile = struct
     type t = bool list list [@@deriving sexp]
 
@@ -1774,13 +1750,13 @@ module Problem20 : S = struct
       in
       print_int (Set.diff grid in_monsters |> Set.length)
   ;;
-end
 
-module Not_implemented : S = struct
-  let solve subpart _file_contents =
-    match (subpart : Subpart.t) with
-    | A -> failwith "not implemented"
-    | B -> failwith "not implemented"
+  let%expect_test _ =
+    solve A Test_cases.problem20;
+    let%bind () = [%expect {| 20899048083289 |}] in
+    solve B Test_cases.problem20;
+    let%bind () = [%expect {| 273 |}] in
+    return ()
   ;;
 end
 
