@@ -1590,6 +1590,69 @@ module Problem19 : S = struct
   ;;
 end
 
+module Problem20 : S = struct
+  let _tile_size = 10
+
+  module Tile = struct
+    type t = bool list list
+
+    let of_lines lines : int * t =
+      print_s [%message (lines : string list)];
+      let hd, tl = List.hd_exn lines, List.tl_exn lines in
+      let id =
+        List.nth_exn (String.split_on_chars hd ~on:[ ' '; ':' ]) 1 |> Int.of_string
+      in
+      id, List.map tl ~f:(fun line -> List.map (String.to_list line) ~f:(Char.( = ) '#'))
+    ;;
+
+    let to_edges t =
+      List.concat_map [ t; List.transpose_exn t ] ~f:(fun t ->
+          [ List.hd_exn t; List.last_exn t ])
+    ;;
+  end
+
+  let edge_to_int (edge : bool list) =
+    List.map [ edge; List.rev edge ] ~f:(fun edge ->
+        List.mapi edge ~f:(fun i pixel -> if pixel then Int.pow 2 i else 0)
+        |> List.reduce_exn ~f:( + ))
+    |> List.min_elt ~compare:Int.compare
+    |> Option.value_exn
+  ;;
+
+  let parse file_contents =
+    List.group file_contents ~break:(fun _line1 line2 -> String.is_empty line2)
+    |> List.map ~f:(List.filter ~f:(fun line -> not (String.is_empty line)))
+    |> List.filter ~f:(fun lines -> List.length lines > 0)
+    |> List.map ~f:Tile.of_lines
+    |> Int.Map.of_alist_exn
+  ;;
+
+  let invert (map : int list Int.Map.t) : int list Int.Map.t =
+    Map.to_alist map
+    |> List.concat_map ~f:(fun (key, data) -> List.map data ~f:(fun datum -> datum, key))
+    |> Int.Map.of_alist_multi
+  ;;
+
+  let solve subpart file_contents =
+    let tiles = parse file_contents in
+    match (subpart : Subpart.t) with
+    | A ->
+      let tiles_by_edge =
+        Map.map tiles ~f:(fun tile -> Tile.to_edges tile |> List.map ~f:edge_to_int)
+        |> invert
+      in
+      let no_dup_edges = Map.filter tiles_by_edge ~f:(fun ids -> List.length ids = 1) in
+      let unduped_edges_by_tile =
+        invert no_dup_edges
+        |> Map.filter ~f:(fun unduped_edges -> List.length unduped_edges = 2)
+      in
+      (*       print_s [%message (unduped_edges_by_tile : int list Int.Map.t)];
+ *)
+      List.reduce_exn ~f:( * ) (Map.keys unduped_edges_by_tile) |> print_int
+    | B -> failwith "not implemented"
+  ;;
+end
+
 module Not_implemented : S = struct
   let solve subpart _file_contents =
     match (subpart : Subpart.t) with
@@ -1628,6 +1691,7 @@ let command =
            ; (module Problem17 : S)
            ; (module Problem18 : S)
            ; (module Problem19 : S)
+           ; (module Problem20 : S)
            ]
            (problem - 1)
        in
