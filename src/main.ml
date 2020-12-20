@@ -34,6 +34,11 @@ let command =
            ; (module Problem18 : S)
            ; (module Problem19 : S)
            ; (module Problem20 : S)
+           ; (module Problem21 : S)
+           ; (module Problem22 : S)
+           ; (module Problem23 : S)
+           ; (module Problem24 : S)
+           ; (module Problem25 : S)
            ]
            (problem - 1)
        in
