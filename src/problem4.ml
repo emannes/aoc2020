@@ -99,8 +99,7 @@ let is_valid t =
 ;;
 
 let parse file_contents =
-  List.group file_contents ~break:(fun row1 row2 ->
-      (not (String.is_empty row1)) && String.is_empty row2)
+  split_into_groups file_contents
   |> List.map ~f:(fun lines ->
          String.concat lines ~sep:" "
          |> String.split ~on:' '

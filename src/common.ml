@@ -5,6 +5,14 @@ let print_int n = printf "%d\n" n
 let parse_as_input s = String.split_lines s |> List.map ~f:String.strip
 let positive_mod n k = ((n mod k) + k) mod k
 
+let split_into_groups file_contents =
+  List.map ~f:String.strip file_contents
+  |> List.group ~break:(fun row1 row2 ->
+         (not (String.is_empty row1)) && String.is_empty row2)
+  |> List.map ~f:(List.filter ~f:(fun s -> not (String.is_empty s)))
+  |> List.filter ~f:(fun l -> not (List.is_empty l))
+;;
+
 module Subpart = struct
   type t =
     | A

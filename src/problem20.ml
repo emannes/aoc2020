@@ -73,11 +73,7 @@ let edge_to_int (edge : bool list) =
 ;;
 
 let parse file_contents =
-  List.group file_contents ~break:(fun _line1 line2 -> String.is_empty line2)
-  |> List.map ~f:(List.filter ~f:(fun line -> not (String.is_empty line)))
-  |> List.filter ~f:(fun lines -> List.length lines > 0)
-  |> List.map ~f:Tile.of_lines
-  |> Int.Map.of_alist_exn
+  split_into_groups file_contents |> List.map ~f:Tile.of_lines |> Int.Map.of_alist_exn
 ;;
 
 let invert (map : int list Int.Map.t) : int list Int.Map.t =

@@ -3,13 +3,7 @@ open Async
 open Common
 
 let solve subpart file_contents =
-  let groups =
-    List.map ~f:String.strip file_contents
-    |> List.group ~break:(fun row1 row2 ->
-           (not (String.is_empty row1)) && String.is_empty row2)
-    |> List.filter ~f:(fun l -> not (List.is_empty l))
-    |> List.map ~f:(List.filter ~f:(fun s -> not (String.is_empty s)))
-  in
+  let groups = split_into_groups file_contents in
   match (subpart : Subpart.t) with
   | A ->
     List.sum

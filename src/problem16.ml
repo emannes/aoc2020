@@ -38,12 +38,10 @@ module Input = struct
 
   let of_contents file_contents =
     let allowed_ranges, my_ticket, nearby_tickets =
-      match
-        List.group file_contents ~break:(fun _line1 line2 -> String.is_empty line2)
-      with
+      match split_into_groups file_contents with
       | [ allowed_ranges
-        ; ("" :: "your ticket:" :: my_ticket)
-        ; ("" :: "nearby tickets:" :: nearby_tickets)
+        ; ("your ticket:" :: my_ticket)
+        ; ("nearby tickets:" :: nearby_tickets)
         ] ->
         ( List.map ~f:parse_range allowed_ranges |> String.Map.of_alist_exn
         , parse_ticket (List.hd_exn my_ticket)
