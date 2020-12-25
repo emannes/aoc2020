@@ -9,7 +9,7 @@ module Hex_dir = struct
     | W
     | NW
     | NE
-  [@@deriving sexp]
+  [@@deriving sexp, enumerate]
 
   (* x-axis = west-east, y-axis = southwest-northeast *)
   let to_pair = function
@@ -46,17 +46,41 @@ module Hex_dir = struct
   ;;
 end
 
+let neighbors tile =
+  List.map Hex_dir.all ~f:(fun hex_dir -> Pair.( + ) tile (Hex_dir.to_pair hex_dir))
+;;
+
+let neighbor_counts tiles =
+  Set.to_list tiles |> List.concat_map ~f:neighbors |> Pair.frequency_map
+;;
+
+let step black_tiles =
+  let neighbor_counts = neighbor_counts black_tiles in
+  let staying_black =
+    Set.filter black_tiles ~f:(fun tile ->
+        match Map.find neighbor_counts tile with
+        | Some (1 | 2) -> true
+        | None | Some _ -> false)
+  in
+  let flipping_to_black =
+    Map.filteri neighbor_counts ~f:(fun ~key:tile ~data:neighbor_count ->
+        neighbor_count = 2 && not (Set.mem black_tiles tile))
+    |> Map.key_set
+  in
+  Set.union staying_black flipping_to_black
+;;
+
 let solve subpart file_contents =
-  let starting_cells =
+  let starting_black_tiles =
     List.map file_contents ~f:Hex_dir.of_string
     |> List.map ~f:(List.sum (module Pair) ~f:Hex_dir.to_pair)
-    |> List.map ~f:(fun cell -> cell, 1)
-    |> Pair.Map.of_alist_reduce ~f:( + )
+    |> Pair.frequency_map
     |> Map.filter ~f:(fun frequency -> frequency mod 2 = 1)
+    |> Map.key_set
   in
   match (subpart : Subpart.t) with
-  | A -> Map.length starting_cells |> print_int
-  | B -> failwith "not implemented"
+  | A -> Set.length starting_black_tiles |> print_int
+  | B -> Fn.apply_n_times ~n:100 step starting_black_tiles |> Set.length |> print_int
 ;;
 
 let%expect_test _ =
@@ -84,5 +108,8 @@ wseweeenwnesenwwwswnew|}
     |> parse_as_input
   in
   solve A file_contents;
-  [%expect {| 10 |}]
+  solve B file_contents;
+  [%expect {|
+    10
+    2208 |}]
 ;;

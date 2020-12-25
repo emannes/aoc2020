@@ -17,4 +17,6 @@ module Pair : sig
 
   include Comparable.S with type t := t
   include Container.Summable with type t := t
+
+  val frequency_map : t list -> int Map.t
 end

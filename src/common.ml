@@ -30,4 +30,8 @@ module Pair = struct
 
   let ( + ) (x1, y1) (x2, y2) = x1 + x2, y1 + y2
   let zero = 0, 0
+
+  let frequency_map ts =
+    List.map ts ~f:(fun t -> t, 1) |> Map.of_alist_reduce ~f:Int.( + )
+  ;;
 end
