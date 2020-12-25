@@ -16,6 +16,5 @@ module Pair : sig
   type t = int * int [@@deriving sexp, compare]
 
   include Comparable.S with type t := t
-
-  val ( + ) : t -> t -> t
+  include Container.Summable with type t := t
 end
