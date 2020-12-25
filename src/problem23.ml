@@ -1,5 +1,6 @@
 open! Core
 open Common
+module HLL = Hash_linked_list
 
 module State = struct
   (* front = current cup, reading clockwise *)
@@ -55,6 +56,7 @@ module State = struct
     print_s [%message (step test_input : int list)];
     print_s [%message (to_A_answer (Fn.apply_n_times ~n:10 step test_input) : string)];
     print_s [%message (to_A_answer (Fn.apply_n_times ~n:100 step test_input) : string)];
+    print_s [%message (to_B_answer (Fn.apply_n_times ~n:10 step test_input) : int)];
     [%expect
       {|
       ("step test_input" (2 8 9 1 5 4 6 7 3))
@@ -63,6 +65,22 @@ module State = struct
   ;;
 end
 
+let step (hll : HLL.t) : HLL.t =
+  let next = HLL.after hll hll.current in
+  let next' = HLL.after hll next in
+  let next'' = HLL.after hll next' in
+  List.iter [ next; next'; next'' ] ~f:(HLL.remove_exn hll);
+  let destination, _ =
+    if Map.min_elt_exn hll.element_map |> fst = hll.current
+    then Map.max_elt_exn hll.element_map
+    else Map.closest_key hll.element_map `Less_than hll.current |> Option.value_exn
+  in
+  HLL.insert_exn hll next ~just_after:destination;
+  HLL.insert_exn hll next' ~just_after:next;
+  HLL.insert_exn hll next'' ~just_after:next';
+  { hll with current = HLL.after hll hll.current }
+;;
+
 let solve subpart _file_contents =
   let input = [ 9; 6; 3; 2; 7; 5; 4; 8; 1 ] in
   match (subpart : Subpart.t) with
@@ -70,7 +88,10 @@ let solve subpart _file_contents =
   | B ->
     let input =
       input
-      @ List.init (1_000_000 - List.length input) ~f:(fun i -> i + List.length input)
+      @ List.init (1_000_000 - List.length input) ~f:(fun i -> 1 + i + List.length input)
     in
-    Fn.apply_n_times ~n:10 State.step input |> State.to_B_answer |> print_int
+    let end_state = Fn.apply_n_times ~n:10_000_000 step (HLL.of_list input) in
+    let next = HLL.after end_state 1 in
+    let next' = HLL.after end_state next in
+    print_int (next * next')
 ;;
