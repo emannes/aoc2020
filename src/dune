@@ -1,5 +1,5 @@
 (library
- (libraries core async re re2)
+ (libraries core async re re2 hash_linked_list)
  (inline_tests)
  (preprocess
   (pps ppx_inline_test ppx_jane))
